@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" integrity="sha384-JcKb8q3iqJ61gNV9KGb8thSsNjpSL0n8PARn9HuZOnIxN0hoP+VmmDGMN5t9UJ0Z" crossorigin="anonymous">
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js" integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js" integrity="sha384-9/reFTGAW83EW2RDu2S0VKaIzap3H66lZH81PoYlFhbGU+6BZp6G7niu735Sk7lN" crossorigin="anonymous"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js" integrity="sha384-B4gt1jrGC7Jh4AgTPSdUtOBvfO8shuf57BaghqFfPlYxofvL8/KUEfYiJOMMV+rV" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.6.11"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.20.0/axios.min.js" integrity="sha512-quHCp3WbBNkwLfYUMd+KwBAgpVukJu5MncuQaWXgCrfgcxCJAq/fo+oqrRKOj+UKEmyMCG3tb8RB63W+EmrOBg==" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.27.0/moment.min.js" integrity="sha512-rmZcZsyhe0/MAjquhTgiUcb4d9knaFc7b5xAfju483gbEXTkeJRUMIPk6s3ySZMYUHEcjKbjLjyddGWMrNEvZg==" crossorigin="anonymous"></script>
+    <title>台灣空氣品質指標(AQI)</title>
+  </head>
+  <body>
+    <div id="app" class="container my-3">      
+        <div class="px-3 py-3 pt-md-5 pb-md-4 mx-auto text-center">
+          <h1 class="display-4">台灣空氣品質指標(AQI)</h1>
+          <p class="lead">每小時提供各測站之空氣品質指標（AQI），原始資料版本公告於空氣品質監測網 <a href="https://airtw.epa.gov.tw" target="_blank">https://airtw.epa.gov.tw</a></p>
+        </div>
+
+        <div class="form-group row">
+            <label for="filterByCounty" class="col-sm-2 col-form-label">篩選城市</label>
+            <div class="col-sm-10">
+                <select class="form-control" id="filterByCounty" v-model="filterCounty">
+                    <option value="all">顯示全部</option>
+                    <option :value="country" v-for="country in counties"> {{ country }}</option>
+                </select>
+            </div>
+        </div>
+        <hr />
+        <div class="card-columns mb-3">
+            <card-component v-for="val in filterRecords" :item="val" :fields="fieldsMap" :key="val.SiteId"  />
+        </div>
+    </div>
+  </body>
+
+  <script type="text/x-template" id="card-template">
+    <div :class="[ 'card' , 'shadow-sm', classType(item.Status) ]" >
+        <div class="card-header">
+          <h4 class="my-0 font-weight-normal">{{ item.County }} - {{ item.SiteName }}</h4>
+        </div>
+        <div class="card-body">
+          <ul class="list-unstyled mb-4">
+            <li>{{ fields.AQI }} : {{ item.AQI }}</li>
+            <li>{{ fields['PM2.5'] }} : {{ item['PM2.5'] }}</li>
+            <li>{{ fields.Status }} : {{ item.Status }}</li>
+            <li>{{ fields.WindSpeed }} : {{ item.WindSpeed }}</li>
+            <li>{{ fields.WindDirec }} : {{ item.WindDirec }}</li>
+            <li>{{ fields.Longitude }} : {{ item.Longitude }}</li>
+            <li>{{ fields.Latitude }} : {{ item.Latitude }}</li>
+          </ul>
+          <div>{{ fields.PublishTime }} : {{ item.PublishTime }}</div>
+        </div>
+      </div>
+ 
+  </script>
+
+  <script>
+    Vue.config.devtools = true;
+
+    function getApi(moment) {
+      let queryTime = moment.startOf('hour').format('YYYY-MM-DD HH:mm');
+      let api = `https://data.epa.gov.tw/api/v1/aqx_p_432?format=json&limit=1000&api_key=9be7b239-557b-4c10-9775-78cadfc555e9&filters=PublishTime,GR,${queryTime}&sort=SiteId`;
+      console.log(api);
+      return api;
+    }
+
+    Vue.component("card-component", {
+        props: { item: Object, fields: Object },
+        template: "#card-template",
+        methods: {
+            classType: function(status) {
+                switch(status){
+                    case '普通':
+                            return 'bg-light';
+                    case '對敏感族群不健康':
+                            return 'bg-warning';
+                    case '對所有族群不健康':
+                            return 'bg-warning';
+                    case '非常不健康':
+                            return 'bg-warning';
+                    case '危害':
+                            return 'bg-danger';
+                    default:
+                           return '';
+                }
+            }
+        }
+    });
+
+    new Vue({
+        el: "#app",
+        data: {
+            records: [],
+            fieldsMap: {},
+            counties: [],
+            loading: true,
+            filterCounty: 'all'
+        },
+        mounted: function() {
+            axios
+            .get(getApi(moment()))
+            .then(response => {
+                let result = response.data;
+                if (result.total == 0) {
+                    console.log('result.total=' + result.total);
+                    return axios.get(getApi(moment().add(-1, 'hours')));
+                }
+                return Promise.resolve(response);
+            })
+            .then(response => {
+                let records = response.data.records;
+                let fields = response.data.fields;
+                let fieldsMap = {};
+                fields.forEach(element => {
+                    fieldsMap[element.id] = element.info.label;
+                });
+                this.records = records;
+                this.fieldsMap = fieldsMap;
+                this.counties = Array.from(new Set(records.map(item => item.County)));              
+            })
+            .catch(error => {
+                console.log(error)
+            })
+            .finally(() => this.loading = false);                
+        },
+        computed: {
+            filterRecords: function() {
+                let vm = this;
+                return vm.filterCounty == 'all' ? vm.records : vm.records.filter(item => item.County === vm.filterCounty);
+            }            
+        }
+    });      
+
+  </script>
+</html>
